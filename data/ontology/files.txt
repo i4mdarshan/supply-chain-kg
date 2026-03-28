@@ -1,0 +1,2 @@
+supply_chain.ttl— OWL/Turtle ontology definition
+prefixes.ttl

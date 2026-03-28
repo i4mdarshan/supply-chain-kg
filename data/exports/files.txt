@@ -1,0 +1,2 @@
+kg_export.ttl— RDF export for SPARQL grading
+kg_export.json— for Next.js API consumption
