@@ -29,12 +29,14 @@ Replace `YOUR_USERNAME` with the actual GitHub username where the repo lives.
 A virtual environment keeps this project's dependencies isolated from the rest of your system. Think of it as a clean room just for this project.
 
 **On Mac / Linux:**
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
 **On Windows (Git Bash):**
+
 ```bash
 python -m venv .venv
 source .venv/Scripts/activate
@@ -52,7 +54,7 @@ You should now see `(.venv)` at the start of your terminal prompt. This means th
 pip install -r requirements.lock
 ```
 
-This installs all project dependencies defined in `pyproject.toml`, including development tools like pytest and ruff. The `-e` flag means the project code in `src/` is importable directly without reinstalling when you edit files.
+This installs all project dependencies defined in `requirements.lock`.
 
 This will take 2–4 minutes the first time. You should see packages being downloaded and installed.
 
