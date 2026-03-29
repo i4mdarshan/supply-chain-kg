@@ -213,3 +213,4 @@ __marimo__/
 .vscode/
 *.parquet
 *.xml
+subtask_breakdown_mycopy.html

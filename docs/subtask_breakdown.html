@@ -1,0 +1,203 @@
+
+<style>
+  .tc { border:0.5px solid var(--color-border-tertiary); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+  .th2 { display:flex; align-items:center; gap:10px; padding:12px 16px; cursor:pointer; user-select:none; background:var(--color-background-secondary); }
+  .th2:hover { background:var(--color-background-tertiary); }
+  .tnum { font-size:11px; font-weight:500; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+  .ttitle { font-size:14px; font-weight:500; color:var(--color-text-primary); flex:1; }
+  .twk { font-size:11px; color:var(--color-text-tertiary); white-space:nowrap; }
+  .tchev { font-size:11px; color:var(--color-text-tertiary); transition:transform 0.2s; }
+  .tbody { display:none; padding:0 16px 14px; }
+  .tbody.open { display:block; }
+  .st { display:flex; gap:8px; padding:6px 0; border-bottom:0.5px solid var(--color-border-tertiary); align-items:flex-start; }
+  .st:last-of-type { border-bottom:none; }
+  .sn { font-size:11px; color:var(--color-text-tertiary); min-width:20px; padding-top:2px; }
+  .stxt { font-size:13px; color:var(--color-text-primary); line-height:1.55; flex:1; }
+  .stxt b { font-weight:500; }
+  .sown { font-size:11px; padding:1px 7px; border-radius:10px; white-space:nowrap; margin-top:2px; }
+  .o1 { background:#E6F1FB; color:#0C447C; }
+  .o2 { background:#E1F5EE; color:#085041; }
+  .ob { background:#EEEDFE; color:#3C3489; }
+  .note { font-size:12px; color:var(--color-text-secondary); background:var(--color-background-tertiary); border-left:3px solid #1D9E75; border-radius:0 8px 8px 0; padding:7px 10px; margin-top:10px; line-height:1.6; }
+  .warn { font-size:12px; color:#633806; background:#FAEEDA; border-left:3px solid #BA7517; border-radius:0 8px 8px 0; padding:7px 10px; margin-top:8px; line-height:1.6; }
+  .req { font-size:11px; padding:1px 7px; border-radius:10px; background:#EAF3DE; color:#27500A; white-space:nowrap; margin-left:4px; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; padding:4px 0 12px; }
+  .li { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--color-text-secondary); }
+  .ld { width:9px; height:9px; border-radius:50%; }
+</style>
+
+<div class="legend">
+  <div class="li"><div class="ld" style="background:#639922"></div>Graded requirement</div>
+</div>
+
+<div id="tasks"></div>
+
+<script>
+const tasks = [
+  {
+    id:"T1", title:"Crawling and data acquisition", wk:"Wk 1-2", color:"#185FA5",
+    subtasks:[
+      { t:"<b>GDELT GKG bulk download</b> — fetch Global Knowledge Graph CSV files for 2022-2024 filtered to themes: SUPPLY_CHAIN, SANCTION, PORT_FACILITY, TRADE_DISPUTE. Target: 4,000+ event records. Use GDELT's free bulk download (no API key). This replaces NewsAPI as the primary unstructured volume source.", o:"1", req:true },
+      { t:"<b>UN Comtrade structured pull</b> — download bilateral trade flow records via the Comtrade bulk API (free, no key for annual data). Filter to HS codes: 85xx (electronics), 84xx (machinery), 39xx (plastics/chemicals). Target: 500+ records minimum for the graded structured source requirement.", o:"1", req:true },
+      { t:"<b>OFAC SDN list parsing</b> — download the OFAC SDN XML from ofac.treasury.gov/system/files/sanctions/SDN.XML. Parse into entity table: {name, type, program, aliases, country}. ~14,000 sanctioned entities available.", o:"1", req:true },
+      { t:"<b>EU Sanctions Map</b> — fetch the EU consolidated sanctions list JSON from sanctionsmap.eu. Parse entity name, legal basis, country, and listed date. Combine with OFAC to form a unified Sanction node type.", o:"1" },
+      { t:"<b>NewsAPI supplementary pull</b> — use the 100 req/day free tier for targeted queries only: 'port disruption', 'semiconductor shortage', 'supply chain sanction'. Store raw JSON. Do not rely on this for volume — treat as enrichment only.", o:"2" },
+      { t:"<b>Document corpus stats</b> for the report: total record count per source, date range, geographic coverage, and keyword hit rate. The grader will check that you meet 5,000 documents total.", o:"both", req:true },
+    ],
+    note:"All acquisition is pure Python scripts run once offline. Store outputs as parquet/CSV so they can be loaded quickly during the demo via @st.cache_data.",
+    warn:"Proposal risk: NewsAPI is listed as your primary unstructured source for '5,000+ news articles' but the free tier caps at 100 requests/day and articles older than 30 days are unavailable. Shift the volume claim to GDELT, which has no such limits."
+  },
+  {
+    id:"T2", title:"Information extraction and data cleaning", wk:"Wk 2-3", color:"#185FA5",
+    subtasks:[
+      { t:"<b>spaCy NER pipeline</b> — fine-tune or configure en_core_web_lg with custom entity labels matching your ontology node types: COMPANY, COUNTRY, PORT, PRODUCT, DISRUPTION_EVENT, ROUTE. Run over all GDELT article bodies.", o:"2" },
+      { t:"<b>GDELT field extraction</b> — parse structured GDELT GKG fields: Actor1Name, Actor2Name, EventCode (CAMEO), ActionGeo_CountryCode, SQLDATE, SourceURL. Map CAMEO codes to your DisruptionCategory node type.", o:"1" },
+      { t:"<b>UN Comtrade normalization</b> — standardize country names to ISO 3166 alpha-3, normalize HS commodity codes to 4-digit level, convert trade values to USD millions. This feeds Company → EXPORTS_TO → Country edges.", o:"1" },
+      { t:"<b>Sanctions list cleaning</b> — deduplicate OFAC + EU entities by name similarity (fuzzy match ≥ 0.9), normalize country fields, map sanction program names to a controlled DisruptionCategory vocabulary.", o:"2" },
+      { t:"<b>Unified entity staging table</b> — produce a single CSV/parquet: {raw_id, surface_form, entity_type, source, date, confidence}. This is the input to T3-T4 and must be completed before entity resolution begins.", o:"both" },
+      { t:"<b>Data quality report</b> — log null rates, NER recall on a 50-record hand-labeled GDELT sample, and Comtrade completeness. Include in the final report's validation section.", o:"2" },
+    ],
+    note:"Build all extraction as importable Python modules (not notebook cells) so Streamlit pages can call them. A 'Data Pipeline' admin page in the app showing record counts per source is a strong demo moment."
+  },
+  {
+    id:"T3", title:"Define similarity measures for entity resolution", wk:"Wk 3", color:"#0F6E56",
+    subtasks:[
+      { t:"<b>String similarity</b> — RapidFuzz token_sort_ratio for name normalization (handles 'Apple Inc.' vs 'Apple Incorporated'). Set initial threshold at 0.85, tune on ground truth.", o:"2" },
+      { t:"<b>Semantic similarity</b> — cosine similarity on sentence-transformer embeddings (all-MiniLM-L6-v2, runs locally, free). This is the 'contextual embeddings' component of the 'LLM semantic-spatial entity resolution pipeline' stated in your proposal.", o:"2", req:true },
+      { t:"<b>Spatial triangulation (proposal-specific)</b> — two entities co-occurring in the same GDELT event + same geographic region score higher. Operationalize as: co_occurrence_score = (shared_events / max_events) × geo_proximity_score. This is the 'spatial triangularisation' your proposal claims — make sure to define it precisely in the report.", o:"2", req:true },
+      { t:"<b>Combined scoring formula</b> — final_score = 0.35×string + 0.40×semantic + 0.25×spatial. Document weight rationale and run ablation study (each measure removed in turn) to justify the combination.", o:"both" },
+      { t:"<b>Ground truth set</b> — hand-label 200 entity pairs (match / no-match) drawn from GDELT company mentions vs UN Comtrade reporter names. This is used for threshold calibration in T4 and F1 reporting in T10.", o:"1", req:true },
+    ],
+    note:"The 'spatial triangularisation' term in your proposal will be scrutinized by the grader. The co-occurrence + geo-proximity operationalization above gives it a concrete, defensible definition. Define it exactly this way in the report.",
+    warn:"Do not describe spatial triangulation vaguely. If asked during the demo, you need to be able to explain the exact formula. The definition above is specific enough to defend."
+  },
+  {
+    id:"T4", title:"Entity linking and resolution", wk:"Wk 3-4", color:"#0F6E56",
+    subtasks:[
+      { t:"<b>Blocking step</b> — group candidate pairs by first 3 chars of normalized name + entity type to avoid O(n²) comparisons across ~20,000 entities.", o:"2" },
+      { t:"<b>Score and merge</b> — run the T3 pipeline across all blocked pairs. Pairs scoring ≥ 0.75 are merged into a canonical entity with all surface forms preserved as aliases[].", o:"2" },
+      { t:"<b>Wikidata grounding</b> — for company and country entities, look up Wikidata QIDs via the Wikidata REST API (free). Store QID as an external_id property on the node. This strengthens ontology alignment and is a good differentiator in the report.", o:"1" },
+      { t:"<b>Resolution output</b> — write canonical entity table back to the staging store: {canonical_id, canonical_name, entity_type, aliases[], wikidata_qid, confidence, sources[]}.", o:"both" },
+      { t:"<b>F1 evaluation</b> — measure precision/recall against the 200-pair ground truth from T3. Report per-entity-type F1 in the report. Target: F1 ≥ 0.80 overall.", o:"both", req:true },
+    ],
+    note:"For the Streamlit demo: add an 'Entity Explorer' page — user types any company name, sees resolved aliases, source documents, and Wikidata link. This directly demonstrates the entity resolution quality to the grader."
+  },
+  {
+    id:"T5", title:"Define ontology and semantic types/relations", wk:"Wk 1-2", color:"#533AB7",
+    subtasks:[
+      { t:"<b>8 required node types</b> (grading minimum): Company, Country, Port, Product, DisruptionEvent, Sanction, Industry, Route. Your proposal also mentions Component and DisruptionCategory — include these as 2 additional types for a total of 10.", o:"both", req:true },
+      { t:"<b>Edge types</b> — define at minimum: SUPPLIES_TO (Company→Company), LOCATED_IN (Company/Port→Country), EXPORTS_TO (Country→Country via Route), AFFECTED_BY (Company→DisruptionEvent), SANCTIONED_BY (Company/Country→Sanction), PART_OF (Company→Industry), USES_PORT (Route→Port), PRODUCES (Company→Product).", o:"both", req:true },
+      { t:"<b>Base ontologies</b> — extend Schema.org Organization for Company, Schema.org Place for Country/Port, Schema.org Event for DisruptionEvent. Use GoodRelations gr:SupplierRelationship for SUPPLIES_TO edges. Document namespace prefixes in /ontology/prefixes.ttl.", o:"2" },
+      { t:"<b>OWL/Turtle definition</b> — write the ontology as a .ttl file using rdflib or Protégé. Define domain/range constraints for all edge types. This is required for the graded RDF deliverable in T6.", o:"2", req:true },
+      { t:"<b>Edge properties</b> — add confidence (float 0-1), source (URL), and timestamp (ISO date) as properties on all edges. Risk score (float) as a node property on Company and Supplier nodes.", o:"1" },
+    ],
+    note:"Define the ontology in week 1 before any data ingestion. The node type labels you use here must match exactly what Neo4j uses as labels and what rdflib uses as RDF classes — inconsistency here causes hours of debugging later.",
+    warn:"Your proposal lists 11 node types in prose but never names them as a formal list. The grader is checking for ≥8 semantic types. Formalize this list in your report's Datasets section with a table: Type | Description | Source."
+  },
+  {
+    id:"T6", title:"Generate RDF triples", wk:"Wk 4-5", color:"#533AB7",
+    subtasks:[
+      { t:"<b>Neo4j → RDF export</b> — use rdflib to serialize a representative KG subset (~5,000 triples) to Turtle (.ttl). Map Neo4j labels to ontology classes: n10s (neosemantics) library can do this directly if installed on AuraDB Free.", o:"1", req:true },
+      { t:"<b>Triple mapping</b> — Company node → :Company rdf:type schema:Organization. SUPPLIES_TO edge → :suppliesTo rdf:type gr:SupplierRelationship with domain/range. Sanction node → :Sanction rdf:type schema:Event.", o:"2" },
+      { t:"<b>RDF validation</b> — parse the .ttl file with rdflib and check: no syntax errors, all subject/object URIs are valid, no orphaned blank nodes, all edge types have defined domain/range.", o:"1" },
+      { t:"<b>SPARQL query set</b> — write 5 SPARQL queries against the RDF export for the graded deliverable: (1) all suppliers of a given company, (2) all sanctioned entities in a country, (3) all disruption events affecting a port, (4) companies with >3 supplier hops to a sanctioned entity, (5) top-10 products by disruption exposure.", o:"both", req:true },
+      { t:"<b>Dual-architecture documentation</b> — clearly explain in the report that SPARQL runs against the static RDF export (for grading) while the live Streamlit app uses Cypher against Neo4j (for performance). Graders need to see both.", o:"both" },
+    ],
+    note:"Streamlit note: add a SPARQL sandbox page in the app that runs queries against the rdflib Graph loaded from the .ttl file. This lets you demo SPARQL compliance live without needing a full triplestore like Fuseki.",
+    warn:"SPARQL ≠ Cypher. Your proposal's technical challenge section doesn't mention this distinction. Add a paragraph to the report explaining your dual-query architecture so the grader doesn't dock points for 'not using SPARQL in the live app.'"
+  },
+  {
+    id:"T7", title:"Data analysis (KG analysis)", wk:"Wk 5-6", color:"#533AB7",
+    subtasks:[
+      { t:"<b>Core data science question</b> — frame this explicitly for the report: 'Given a company, which of its tier-1 through tier-3 suppliers are exposed to active sanctions or recent disruption events, and how does risk propagate through the network?' This directly answers the grader's 'interesting data science question' requirement.", o:"both", req:true },
+      { t:"<b>Risk propagation traversal</b> — implement BFS in Cypher: MATCH path = (c:Company {name:$name})-[:SUPPLIES_TO*1..3]-(s:Company)-[:AFFECTED_BY]->(e:DisruptionEvent) RETURN path. Expose depth as a Streamlit slider (1-3 hops).", o:"1" },
+      { t:"<b>Supplier risk scoring</b> — composite score per node: risk_score = (disruption_count × recency_decay) + (sanction_exposure × 2.0) + (centrality_score × 0.5). Store as node property.", o:"1" },
+      { t:"<b>Graph centrality</b> — run Neo4j GDS PageRank and betweenness centrality on the supplier subgraph. High-betweenness suppliers are systemic chokepoints — this is a strong data science finding for the report.", o:"1" },
+      { t:"<b>Node2Vec + link prediction</b> — train Node2Vec embeddings using Neo4j GDS. Use embedding pairs to train a logistic regression classifier predicting missing SUPPLIES_TO edges. Report AUC-ROC on a 20% held-out edge set.", o:"2", req:true },
+      { t:"<b>Disruption trend analysis</b> — aggregate DisruptionEvent nodes by month + Industry to produce a time-series disruption count. Feed into the Streamlit choropleth heatmap.", o:"2" },
+    ],
+    note:"The grader wants to see a KG analysis section. Frame the centrality + risk propagation findings as a narrative: 'We found that X% of Fortune 500 supplier networks in our KG pass through fewer than 20 high-betweenness port nodes, suggesting systemic fragility.' Concrete findings like this score well.",
+    warn:"Your proposal mentions 'early-warning signals' as a problem this KG solves. Make sure your analysis section actually demonstrates this — e.g. show a company that had a sanctioned tier-2 supplier 6 months before a news event. Even one example makes this claim credible."
+  },
+  {
+    id:"T8", title:"Design front-end / visualization (Streamlit)", wk:"Wk 7-8", color:"#0F6E56",
+    subtasks:[
+      { t:"<b>4 Streamlit pages</b>: (1) Company Risk Dashboard — risk score + KPIs; (2) Supplier Network Explorer — interactive graph; (3) Disruption Heatmap — choropleth by country; (4) Natural Language Query — LLM→Cypher interface. Plus a hidden /validation page for demo.", o:"2" },
+      { t:"<b>Supplier network graph</b> — use streamlit-agraph. Node color = risk score (green→red scale), node size = PageRank centrality, edge label = relationship type. Depth slider (1-3 hops) wired to st.session_state.", o:"2" },
+      { t:"<b>Risk heatmap</b> — Plotly choropleth (st.plotly_chart) showing disruption event density per country. Year slider for temporal filtering. Color scale: white→coral for disruption intensity.", o:"2" },
+      { t:"<b>Session state schema</b> — define up front: st.session_state keys: selected_company (str), graph_depth (int 1-3), query_history (list), active_page (str). All pages read from this schema — do not create ad-hoc keys in individual pages.", o:"both" },
+      { t:"<b>Caching strategy</b> — @st.cache_resource for Neo4j driver, @st.cache_data(ttl=3600) for all Cypher query results. Without this, every widget interaction re-fires the graph database. Critical for a smooth live demo.", o:"1" },
+    ],
+    note:"Use st.session_state carefully to minimize reruns."
+  },
+  {
+    id:"T9", title:"Query mechanism (SPARQL + Cypher) and front-end integration", wk:"Wk 7-8", color:"#0F6E56",
+    subtasks:[
+      { t:"<b>Cypher query library</b> — 6 parameterized templates stored in /queries/cypher/: supplier_exposure.cypher, risk_propagation.cypher, sanction_check.cypher, port_disruption.cypher, link_prediction.cypher, trend_analysis.cypher. Each callable from Streamlit with Python dict params.", o:"1" },
+      { t:"<b>LLM → Cypher translator</b> — prompt the LLM with: (1) your ontology schema as context, (2) 5 few-shot examples of NL→Cypher pairs, (3) the user's question. Use Claude or GPT-3.5 API. This fulfills the 'LLM integrated in this knowledge graph' claim in your proposal.", o:"2", req:true },
+      { t:"<b>Query safety layer</b> — parse generated Cypher before execution: reject any query containing MERGE, DELETE, SET, CREATE, DROP. Only allow MATCH + RETURN. Log rejected queries for the report.", o:"1" },
+      { t:"<b>SPARQL sandbox page</b> — load the RDF export (.ttl) into an rdflib Graph at app startup. Add a Streamlit text_area for SPARQL input, run via graph.query(), display results as st.dataframe. This satisfies the SPARQL grading requirement in a live demo context.", o:"2", req:true },
+      { t:"<b>Query result wiring</b> — all Cypher results return as pandas DataFrames. Pass directly to st.plotly_chart (for heatmaps), streamlit-agraph (for network graphs), or st.dataframe (for tabular results). No intermediate serialization needed — this is Streamlit's main advantage.", o:"both" },
+    ],
+    note:"The LLM→Cypher feature directly fulfills your proposal's claim: 'enable diverse natural language queries to be answered through this knowledge graph.' Demo scenario: type 'Which suppliers of TSMC are affected by US sanctions?' and show the Cypher translation + graph result side by side."
+  },
+  {
+    id:"T10", title:"Validation methods", wk:"Ongoing", color:"#888780",
+    subtasks:[
+      { t:"<b>T1 — corpus validation</b>: document table in report: Source | Record count | Date range | Unique entities extracted. Must show ≥5,000 total documents across ≥3 sources and ≥500 structured records.", o:"both", req:true },
+      { t:"<b>T2 — NER validation</b>: precision/recall on 50 hand-labeled GDELT sentences. Report per-type F1 for COMPANY, COUNTRY, PORT, DISRUPTION_EVENT. Target F1 ≥ 0.75 for each type.", o:"2", req:true },
+      { t:"<b>T3-T4 — entity resolution validation</b>: F1 on 200-pair ground truth set. Ablation table: show performance of string-only, semantic-only, spatial-only, and combined. Directly validates the 'spatial triangularisation' claim.", o:"2", req:true },
+      { t:"<b>T5 — ontology validation</b>: rdflib OWL consistency check — no unsatisfiable classes, all edge domain/range constraints satisfied. List all 8+ semantic types in a table in the report.", o:"both", req:true },
+      { t:"<b>T7 — KG analysis validation</b>: link prediction AUC-ROC on 20% held-out edge set. Risk score spot-check: manually verify top-10 highest-risk companies against known real-world events. Report correlation.", o:"1", req:true },
+      { t:"<b>T8-T9 — usability validation</b>: have one person outside the team complete 3 analyst tasks using only the UI (no guidance). Record: task completion rate, time-on-task, and any failure points. Include in report as 'interface evaluation.'", o:"both" },
+    ],
+    note:"Add a /validation page in the Streamlit app that displays all metrics live — NER F1, entity resolution F1, link prediction AUC, KG stats. This page doubles as a demo asset and saves time building separate report figures. Show the grader this page during the live demo.",
+    warn:"The grader expects you to 'define how to validate your methods for each step' — not just report final numbers. For each task, include a brief methods paragraph explaining HOW you measured, not just WHAT the score was."
+  }
+];
+
+const container = document.getElementById('tasks');
+tasks.forEach((t, i) => {
+  const card = document.createElement('div');
+  card.className = 'tc';
+
+  const hd = document.createElement('div');
+  hd.className = 'th2';
+  hd.innerHTML = `
+    <span class="tnum" style="background:${t.color}22;color:${t.color}">${t.id}</span>
+    <span class="ttitle">${t.title}</span>
+    <span class="twk">${t.wk}</span>
+    <span class="tchev" id="c${i}">▶</span>
+  `;
+
+  const bd = document.createElement('div');
+  bd.className = 'tbody';
+  bd.id = `b${i}`;
+
+  let html = '';
+  t.subtasks.forEach((s, j) => {
+    const oc = s.o === '1' ? 'o1' : s.o === '2' ? 'o2' : 'ob';
+    const ol = "";
+    const req = s.req ? '<span class="req">Graded req</span>' : '';
+    html += `<div class="st">
+      <span class="sn">${j+1}.</span>
+      <span class="stxt">${s.t}${req}</span>
+      <span class="sown ${oc}">${ol}</span>
+    </div>`;
+  });
+
+  if (t.warn) html += `<div class="warn">${t.warn}</div>`;
+  html += `<div class="note">${t.note}</div>`;
+  bd.innerHTML = html;
+
+  hd.onclick = () => {
+    const open = bd.classList.contains('open');
+    bd.classList.toggle('open', !open);
+    document.getElementById(`c${i}`).style.transform = open ? '' : 'rotate(90deg)';
+  };
+
+  card.appendChild(hd);
+  card.appendChild(bd);
+  container.appendChild(card);
+});
+</script>
