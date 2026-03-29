@@ -32,3 +32,17 @@ print(df[df['source']=='eu_sanctions'][['raw_id','surface_form','entity_type']].
 
 print('\n=== SAMPLE — NEWSAPI ===')
 print(df[df['source']=='newsapi'][['raw_id','surface_form','date']].head(3).to_string())
+
+
+
+"""
+Expected Output:
+
+Total rows should be ~25,000+
+All 7 columns present with zero nulls on critical fields
+All 4 sources represented in the breakdown
+Surface forms contain real names/text, not empty strings or garbage values
+Confidence values are 1.0 for sanctions sources, 0.6-0.7 for GDELT/NewsAPI
+
+
+"""

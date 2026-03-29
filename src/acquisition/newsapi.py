@@ -36,7 +36,7 @@ class NewsAPIAcquirer(BaseAcquirer):
         end_date   = date.today()
         start_date = end_date - timedelta(days=days_back)
         # Free tier only allows articles from last 30 days
-        logger.info(f"NewsAPI fetch: {start_date} → {end_date}")
+        logger.info(f"NewsAPI fetch: {start_date} -> {end_date}")
         logger.info(f"Running {len(QUERIES)} queries (free tier: 100 req/day)")
 
         all_articles = []
